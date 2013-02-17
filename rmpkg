@@ -55,7 +55,6 @@ done
 # chech if params set
 if [ -z "$PKG" ]; then
   exit_with_usage
-  exit 1;
 fi
 
 PKGNAME="$($BASENAME $PKG)"
