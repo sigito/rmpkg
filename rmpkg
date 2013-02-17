@@ -1,0 +1,111 @@
+#!/bin/sh
+
+PKGUTIL=/usr/sbin/pkgutil
+LSBOM=/usr/bin/lsbom
+XARGS=/usr/bin/xargs
+BASENAME=/usr/bin/basename
+DATE=/bin/date
+FIND=/usr/bin/find
+XMLLINT=/usr/bin/xmllint
+
+SUDO=/usr/bin/sudo
+
+RM=/bin/rm
+RM_ARGS="-i"
+RM_ALL_OPT="-r"
+
+TMP_DIR=/tmp
+
+PACKAGE_INFO=PackageInfo
+BOM=Bom
+
+function exit_with_usage() {
+  echo "Usage: $($BASENAME $0) [-f] [-d] -p path-to-pkg"
+  echo "       -f -- force delete files. Will not ask for delection of every file."
+  echo "       -p path-to-pkg -- specify path to package to delete."
+  echo "       -d -- remove whole directory with package installation."
+  exit 1
+}
+
+args=$(getopt :fdp: $*)
+if [ $? != 0 ]; then
+  exit_with_usage
+fi
+
+set -- $args
+for arg; do
+  case $arg in
+    -f)
+      echo "-f option specified. Forcing deletion."
+      RM_ARGS="-f"
+      shift;;
+    -d)
+      echo "-d option specified. Removing whole package installation."
+      RM_ALL="y"
+      shift;;
+    -p)
+      PKG=$2
+      shift;;
+    --)
+      shift;
+      break;;
+  esac
+done
+
+# chech if params set
+if [ -z "$PKG" ]; then
+  exit_with_usage
+  exit 1;
+fi
+
+PKGNAME="$($BASENAME $PKG)"
+EXPAND_DIR="${TMP_DIR}/${PKGNAME}.${RANDOM}.$($DATE +%s)"
+
+# extract package
+echo "Expanding ${PKG} to $EXPAND_DIR"
+$PKGUTIL --expand "$PKG" "$EXPAND_DIR"
+
+if [ $? -ne 0 ]; then
+  exit 1
+fi
+
+cd "$EXPAND_DIR"
+# look for dir with ending pkg and delete content of every subpackage
+for pkg_dir in $($FIND . -type d -name "*.pkg"); do
+  echo "Processing subpackage at $pkg_dir"
+  cd "$pkg_dir"
+
+  echo "Parsing install-location..."
+  install_dir="$($XMLLINT --xpath "string(//@install-location)" "$PACKAGE_INFO")"
+  echo "install-location: $install_dir"
+
+  echo "Removing installed package staff..."
+
+  if [ "$RM_ALL" = "y" ]; then
+    full_dir_path="${install_dir}/$($XMLLINT --xpath "string(//bundle/@path)" "$PACKAGE_INFO")"
+
+    echo "Removing whole $full_dir_path"
+    "$SUDO" "$RM" "$RM_ARGS" "$RM_ALL_OPT" "$full_dir_path"
+    if [ $? != 0 ]; then
+      echo "Unable to delete $full_dir_path"
+      exit 2
+    fi
+  else
+    for file in $("$LSBOM" -slf "$BOM"); do
+      full_path="${install_dir}/${file}"
+      echo "Removing $full_path"
+      "$SUDO" "$RM" "$RM_ARGS" "$full_path"
+      if [ $? != 0 ]; then
+        echo "Unable to delete $full_path"
+        exit 2
+      fi
+    done
+  fi
+done
+
+# clean up
+echo "Removing temporary directory $EXPAND_DIR"
+"$RM" -rf "$EXPAND_DIR"
+
+echo "Success."
+exit 0
