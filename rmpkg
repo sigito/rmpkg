@@ -9,6 +9,7 @@ FIND=/usr/bin/find
 XMLLINT=/usr/bin/xmllint
 
 SUDO=/usr/bin/sudo
+SUDO_OPTS="-s"
 
 RM=/bin/rm
 RM_ARGS="-i"
@@ -93,15 +94,19 @@ for pkg_dir in $($FIND . -type d -name "*.pkg"); do
     for file in $("$LSBOM" -slf "$BOM"); do
       full_path="${install_dir}/${file}"
       echo "Removing $full_path"
-      "$SUDO" "$RM" "$RM_ARGS" "$full_path"
+      "$SUDO" "$SUDO_OPTS" "$RM" "$RM_ARGS" "$full_path"
       if [ $? != 0 ]; then
         echo "Unable to delete $full_path"
         exit 2
       fi
     done
   fi
+
+  # get back to root
+  cd "${EXPAND_DIR}"
 done
 
+cd ..
 # clean up
 echo "Removing temporary directory $EXPAND_DIR"
 "$RM" -rf "$EXPAND_DIR"
