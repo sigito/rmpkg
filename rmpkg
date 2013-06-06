@@ -2,7 +2,6 @@
 
 PKGUTIL=/usr/sbin/pkgutil
 LSBOM=/usr/bin/lsbom
-XARGS=/usr/bin/xargs
 BASENAME=/usr/bin/basename
 DATE=/bin/date
 FIND=/usr/bin/find
@@ -15,15 +14,21 @@ RM=/bin/rm
 RM_ARGS="-i"
 RM_ALL_OPT="-r"
 
+# Temporal files directory
 TMP_DIR=/tmp
 
+# File templates
 PACKAGE_INFO=PackageInfo
 BOM=Bom
 
+print_description() {
+  echo "The $(${BASENAME} $0) utility removes Mac OS packages by their pkg files."
+  print_usage
+}
+
 print_usage() {
-  echo "Usage: $($BASENAME $0) [-f] [-d] [-t tmp_dir] -p path-to-pkg"
+  echo "Usage: $(${BASENAME} $0) [-f] [-d] [-t tmp_dir] path_to_pkg"
   echo "       -f -- force delete files. Will not ask for delection of every file."
-  echo "       -p path-to-pkg -- specify path to package to delete."
   echo "       -d -- remove whole directory with package installation."
   echo "       -t tmp_dir -- specify directory to put temporal files to. Default is $TMP_DIR."
 }
@@ -50,9 +55,14 @@ error() {
 
 # parse input parameters to RM_*, VERBOSE and PKG variables
 parse_parameters() {
-  while getopts ":fdp:t:" flag
+  while getopts ":hfdt:" flag
   do
     case $flag in
+      h)
+        # print description and exit
+        print_description
+        exit 0
+        ;;
       f)
         # force delete pkg files
         info "-f option specified. Forcing deletion."
@@ -99,7 +109,7 @@ if [ -z "$PKG" ]; then
   exit 1
 fi
 
-PKG_NAME="$($BASENAME "${PKG}")"
+PKG_NAME="$(${BASENAME} "${PKG}")"
 if [ $? -ne 0 ]; then
   error "Cannot extract package name from path $PKG"
   exit 1
