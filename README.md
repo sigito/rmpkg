@@ -6,9 +6,10 @@ Utility for removing packages without Bom files in Receipts directory.
 Usage:
 
 ```bash
-rmpkg [-f] [-d] [-t tmp_dir] -p path-to-pkg
-    -f – force delete files. Will not ask for deletion of every file.
+rmpkg [-hfd] [-t tmp_dir] -p path-to-pkg
     -p path-to-pkg – specify path to package to delete.
+    -h - print short description and this message.
+    -f – force delete files. Will not ask for deletion of every file.
     -d – remove whole directory with package installation.
     -t tmp_dir - specify directory to put temporal files to. Default is /tmp.
 ```
