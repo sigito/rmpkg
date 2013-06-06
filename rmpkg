@@ -20,96 +20,154 @@ TMP_DIR=/tmp
 PACKAGE_INFO=PackageInfo
 BOM=Bom
 
-function exit_with_usage() {
-  echo "Usage: $($BASENAME $0) [-f] [-d] -p path-to-pkg"
+print_usage() {
+  echo "Usage: $($BASENAME $0) [-f] [-d] [-t tmp_dir] -p path-to-pkg"
   echo "       -f -- force delete files. Will not ask for delection of every file."
   echo "       -p path-to-pkg -- specify path to package to delete."
   echo "       -d -- remove whole directory with package installation."
-  exit 1
+  echo "       -t tmp_dir -- specify directory to put temporal files to. Default is $TMP_DIR."
 }
 
-args=$(getopt :fdp: $*)
-if [ $? != 0 ]; then
-  exit_with_usage
-fi
+clean_up() {
+  # clean up
+  if [ -n "$EXPAND_DIR" ]; then
+    info "Removing temporary directory $EXPAND_DIR"
+    "$RM" -rf "$EXPAND_DIR"
+  fi
+}
 
-set -- $args
-for arg; do
-  case $arg in
-    -f)
-      echo "-f option specified. Forcing deletion."
-      RM_ARGS="-f"
-      shift;;
-    -d)
-      echo "-d option specified. Removing whole package installation."
-      RM_ALL="y"
-      shift;;
-    -p)
-      PKG=$2
-      shift;;
-    --)
-      shift;
-      break;;
-  esac
-done
+info() {
+  echo "Info: $*"
+}
 
-# chech if params set
+warn() {
+  echo "Warn: $*"
+}
+
+error() {
+  echo "ERROR: $*"
+}
+
+# parse input parameters to RM_*, VERBOSE and PKG variables
+parse_parameters() {
+  while getopts ":fdp:t:" flag
+  do
+    case $flag in
+      f)
+        # force delete pkg files
+        info "-f option specified. Forcing deletion."
+        RM_ARGS="-f"
+        ;;
+      d)
+        # delete full pkg directory instead of one-by-one per file removal
+        info "-d option specified. Removing whole package installation."
+        RM_ALL="y"
+        ;;
+      p)
+        # package name to work with
+        # check if we can read package
+        if [ -r "$OPTARG" ]; then
+          PKG="$OPTARG"
+          info "$PKG will be considered for deletion."
+        fi
+        ;;
+      t)
+        # change dir to work with package.
+        # check if directory exists
+        if [ -d "$OPTARG" ]; then
+          TMP_DIR="$OPTARG"
+          info "Work with package will be done in $TMP_DIR"
+        else
+          warn "No such directory $OPTARG. Temporal files derectory left default: $TMP_DIR"
+        fi
+        ;;
+      ?)
+        warn "Unknown flag: $OPTARG"
+        ;;
+      *)
+        error "Unexpected flag: $flag, arg: $OPTARG."
+        ;;
+    esac
+  done
+}
+
+parse_parameters $@
+
+# check if package name passed
 if [ -z "$PKG" ]; then
-  exit_with_usage
-fi
-
-PKGNAME="$($BASENAME $PKG)"
-EXPAND_DIR="${TMP_DIR}/${PKGNAME}.${RANDOM}.$($DATE +%s)"
-
-# extract package
-echo "Expanding ${PKG} to $EXPAND_DIR"
-$PKGUTIL --expand "$PKG" "$EXPAND_DIR"
-
-if [ $? -ne 0 ]; then
+  print_usage
   exit 1
 fi
 
+PKG_NAME="$($BASENAME "${PKG}")"
+if [ $? -ne 0 ]; then
+  error "Cannot extract package name from path $PKG"
+  exit 1
+fi
+
+# generate directory to expand package to
+EXPAND_DIR="${TMP_DIR}/${PKG_NAME}.${RANDOM}.$($DATE +%s)"
+
+# extract package
+info "Expanding ${PKG} to $EXPAND_DIR"
+$PKGUTIL --expand "$PKG" "$EXPAND_DIR"
+if [ $? -ne 0 ]; then
+  error "Failed while expanding $PKG to $EXPAND_DIR"
+  clean_up
+  exit 1
+fi
+
+# remember current working dir
+pushd .
+
+# go to dir with expanded pkg
 cd "$EXPAND_DIR"
-# look for dir with ending pkg and delete content of every subpackage
-for pkg_dir in $($FIND . -type d -name "*.pkg"); do
-  echo "Processing subpackage at $pkg_dir"
+
+# look for dir with ending '.pkg' and delete content of every subpackage
+for pkg_dir in $(${FIND} . -type d -name "*.pkg"); do
+  info "Processing subpackage $pkg_dir"
+  # remember working directory
+  pushd .
+  # go to pkg content dir
   cd "$pkg_dir"
 
-  echo "Parsing install-location..."
+  info "Parsing install-location..."
   install_dir="$($XMLLINT --xpath "string(//@install-location)" "$PACKAGE_INFO")"
-  echo "install-location: $install_dir"
+  info "install-location: $install_dir"
 
-  echo "Removing installed package staff..."
+  info "Removing installed package content..."
 
   if [ "$RM_ALL" = "y" ]; then
     full_dir_path="${install_dir}/$($XMLLINT --xpath "string(//bundle/@path)" "$PACKAGE_INFO")"
 
-    echo "Removing whole $full_dir_path"
+    info "Removing whole $full_dir_path"
     "$SUDO" "$RM" "$RM_ARGS" "$RM_ALL_OPT" "$full_dir_path"
     if [ $? != 0 ]; then
-      echo "Unable to delete $full_dir_path"
+      info "Unable to delete $full_dir_path"
+      clean_up
       exit 2
     fi
   else
     for file in $("$LSBOM" -slf "$BOM"); do
       full_path="${install_dir}/${file}"
-      echo "Removing $full_path"
+      info "Removing $full_path"
       "$SUDO" "$SUDO_OPTS" "$RM" "$RM_ARGS" "$full_path"
       if [ $? != 0 ]; then
-        echo "Unable to delete $full_path"
+        info "Unable to delete $full_path"
+        clean_up
         exit 2
       fi
     done
   fi
 
   # get back to root
-  cd "${EXPAND_DIR}"
+  popd
 done
 
-cd ..
-# clean up
-echo "Removing temporary directory $EXPAND_DIR"
-"$RM" -rf "$EXPAND_DIR"
+# go to execution directory
+popd
 
-echo "Success."
+clean_up
+
+info "Success."
 exit 0
