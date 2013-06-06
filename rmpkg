@@ -27,7 +27,8 @@ print_description() {
 }
 
 print_usage() {
-  echo "Usage: $(${BASENAME} $0) [-f] [-d] [-t tmp_dir] path_to_pkg"
+  echo "Usage: $(${BASENAME} $0) [-hfd] [-t tmp_dir] path_to_pkg"
+  echo "       -h -- print short description and this message."
   echo "       -f -- force delete files. Will not ask for delection of every file."
   echo "       -d -- remove whole directory with package installation."
   echo "       -t tmp_dir -- specify directory to put temporal files to. Default is $TMP_DIR."
@@ -72,14 +73,6 @@ parse_parameters() {
         # delete full pkg directory instead of one-by-one per file removal
         info "-d option specified. Removing whole package installation."
         RM_ALL="y"
-        ;;
-      p)
-        # package name to work with
-        # check if we can read package
-        if [ -r "$OPTARG" ]; then
-          PKG="$OPTARG"
-          info "$PKG will be considered for deletion."
-        fi
         ;;
       t)
         # change dir to work with package.
