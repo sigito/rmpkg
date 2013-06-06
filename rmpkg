@@ -27,7 +27,8 @@ print_description() {
 }
 
 print_usage() {
-  echo "Usage: $(${BASENAME} $0) [-hfd] [-t tmp_dir] path_to_pkg"
+  echo "Usage: $(${BASENAME} $0) [-hfd] [-t tmp_dir] -p path_to_pkg"
+  echo "       -p path-to-pkg -– specify path to package to delete."
   echo "       -h -- print short description and this message."
   echo "       -f -- force delete files. Will not ask for delection of every file."
   echo "       -d -- remove whole directory with package installation."
@@ -54,9 +55,9 @@ error() {
   echo "ERROR: $*"
 }
 
-# parse input parameters to RM_*, VERBOSE and PKG variables
+# parse input parameters to RM_* and PKG variables
 parse_parameters() {
-  while getopts ":hfdt:" flag
+  while getopts ":hfdt:p:" flag
   do
     case $flag in
       h)
@@ -74,6 +75,17 @@ parse_parameters() {
         info "-d option specified. Removing whole package installation."
         RM_ALL="y"
         ;;
+      p)
+        # package name to work with
+        # check if we can read package
+        if [ -r "$OPTARG" ]; then
+          PKG="$OPTARG"
+          info "$PKG will be deleted."
+        else
+          error "Cannot open for read $OPTARG."
+          exit 1
+        fi
+        ;;
       t)
         # change dir to work with package.
         # check if directory exists
@@ -89,15 +101,20 @@ parse_parameters() {
         ;;
       *)
         error "Unexpected flag: $flag, arg: $OPTARG."
+        if [ -r "$OPTARG" ]; then
+          PKG="$OPTARG"
+          info "$PKG will be considered for deletion."
+        fi
         ;;
     esac
   done
 }
 
-parse_parameters $@
+parse_parameters "$@"
 
 # check if package name passed
 if [ -z "$PKG" ]; then
+  error "Package not specified."
   print_usage
   exit 1
 fi
