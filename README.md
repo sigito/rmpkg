@@ -6,13 +6,20 @@ Utility for removing packages without Bom files in Receipts directory.
 Usage:
 
 ```bash
-rmpkg [-hfd] [-t tmp_dir] -p path-to-pkg
-    -p path-to-pkg – specify path to package to delete.
-    -h - print short description and this message.
-    -f – force delete files. Will not ask for deletion of every file.
-    -d – remove whole directory with package installation.
-    -t tmp_dir - specify directory to put temporal files to. Default is /tmp.
+rmpkg [-v] [-h] [-f] [-d] [-t tmp-dir] package-to-remove
+	Removes package specified by package-to-remove.
+
+	-v	Verbose mode. Will only go through package and print general information.
+	-h	Print short description and this message.
+	-f	Force delete files. Will not ask for delection of every file.
+	-d	Remove whole directory with package installation.
+	-t tmp-dir
+		Specify directory to put temporal files to. Default is /tmp.
 ```
 Removes package from Mac OS X system by it's installation archive.
+
+Note
+-----
+Software might damage data on your computer, use at your own risk.
 
 For more: http://it-routings.blogspot.com/2013/02/remove-package-in-mac-os-x.html
