@@ -186,11 +186,12 @@ if [ $? -ne 0 ]; then
 fi
 
 # generate directory to expand package to
-EXPAND_DIR="${TMP_DIR}/${PKG_NAME}.${RANDOM}.$(${DATE} +%s)"
+#EXPAND_DIR="${TMP_DIR}/${PKG_NAME}.${RANDOM}.$(${DATE} +%s)"
+EXPAND_DIR="/tmp/MacTeX.pkg.26512.1394231345"
 
 # extract package
-info "Expanding $PKG to ${f_u}$EXPAND_DIR${f_nu}."
-"$PKGUTIL" --expand "$PKG" "$EXPAND_DIR"
+info "Expanding ${f_u}$PKG${f_nu} to ${f_u}$EXPAND_DIR${f_nu}."
+#"$PKGUTIL" --expand "$PKG" "$EXPAND_DIR"
 if [ $? -ne 0 ]; then
   error "Failed while expanding ${f_u}$PKG${f_nu} to ${f_u}$EXPAND_DIR${f_nu}."
   clean_up
@@ -214,19 +215,22 @@ for pkg_dir in ${pkg_dirs}; do
   # go to pkg content dir
   cd "$pkg_dir"
 
-  info "Parsing install-location..."
+  debug "Parsing install-location..."
   install_dir=$(install_location "$PACKAGE_INFO")
   info "Install location: $install_dir"
 
   if [ ${RM_ALL} ]; then
-    sub_paths=$(bundles_path "$PACKAGE_INFO")
-    info "Sub paths: ${sub_paths}"
+    bundles=$(bundles_path "$PACKAGE_INFO")
+    info "Bundles: $bundles"
 
-    for sub_path in ${sub_paths}; do
-      # dirname command removes trailing './' in the path if any
-      sub_path="$(${DIRNAME} "${install_dir}/$sub_path")"
-      info "Removing subpath $sub_path"
-      remove "$RM_ALL_OPT" "$sub_path"
+    for bundle in ${bundles}; do
+      # remove trailing './'
+      bundle=${bundle#./}
+      debug "Processing subpath: $bundle"
+      # construct full path to delete
+      bundle="${install_dir}/${bundle}"
+      info "Removing subpath ${f_u}$bundle${f_nu}"
+      remove "$RM_ALL_OPT" "$bundle"
     done
   else
     for file in $("$LSBOM" -slf "$BOM"); do
@@ -238,6 +242,8 @@ for pkg_dir in ${pkg_dirs}; do
     done
   fi
 
+  info "Finished processing of ${f_u}$pkg_dir${f_nu}."
+
   # get back to root
   popd
 done
@@ -245,7 +251,7 @@ done
 # go to execution directory
 popd
 
-clean_up
+#clean_up
 
 info "Done."
 exit 0
