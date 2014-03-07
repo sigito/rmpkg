@@ -105,12 +105,12 @@ parse_parameters() {
       ;;
       f)
       # force delete pkg files
-        info "-f option specified. Forcing deletion."
+        debug "-f option specified. Forcing deletion."
         RM_ARGS="-f"
       ;;
       d)
       # delete full pkg directory instead of one-by-one per file removal
-        info "-d option specified. Removing whole package installation."
+        debug "-d option specified. Removing whole package installation."
         RM_ALL=true
       ;;
       t)
@@ -118,7 +118,7 @@ parse_parameters() {
       # check if directory exists
         if [ -d "$OPTARG" ]; then
           TMP_DIR="$OPTARG"
-          info "Work with package will be done in $TMP_DIR"
+          debug "Work with package will be done in $TMP_DIR"
         else
           warn "No such directory $OPTARG. Temporal files derectory left default: $TMP_DIR"
         fi
@@ -148,17 +148,17 @@ parse_parameters() {
     exit 1
   fi
 
-  info "Specified package: $PKG ."
+  debug "Specified package: $PKG."
 }
 
 # returns package install location by parsing PackageInfo file by path specified with 1st parameter
 install_location() {
-  echo "$(${XMLLINT} --xpath "string(//@install-location)" "$1")"
+  echo "$(${XMLLINT} --xpath "string(/pkg-info/@install-location)" "$1")"
 }
 
 # return install path of the bundle content, can return multiple rows
 bundles_path() {
-  echo $(${XMLLINT} --xpath "//bundle/@path" "$1" | tr ' ' '\n' | cut -d '=' -f 2 | tr -d '"')
+  echo $(${XMLLINT} --xpath "/pkg-info/bundle/@path" "$1" | tr ' ' '\n' | cut -d '=' -f 2 | tr -d '"')
 }
 
 # remove command wrapper
@@ -217,7 +217,7 @@ for pkg_dir in ${pkg_dirs}; do
 
   info "Parsing install-location..."
   install_dir=$(install_location "$PACKAGE_INFO")
-  info "install-location: $install_dir"
+  info "Install location: $install_dir"
 
   if [ ${RM_ALL} ]; then
     sub_paths=$(bundles_path "$PACKAGE_INFO")
