@@ -1,8 +1,14 @@
 #!/bin/sh
 
+# todo add pkgutil --forget
+
+# lets be paranoic
+set -e
+
 PKGUTIL=/usr/sbin/pkgutil
 LSBOM=/usr/bin/lsbom
 BASENAME=/usr/bin/basename
+DIRNAME=/usr/bin/dirname
 DATE=/bin/date
 FIND=/usr/bin/find
 XMLLINT=/usr/bin/xmllint
@@ -21,118 +27,173 @@ TMP_DIR=/tmp
 PACKAGE_INFO=PackageInfo
 BOM=Bom
 
+DEBUG=false
+
+# ----- Output format variables ----- #
+# reset formatting
+f_reset=$(tput sgr0)
+
+# colors
+f_normal=$(tput setaf 7)
+f_red=$(tput setaf 1)
+f_green=$(tput setaf 2)
+f_yellow=$(tput setaf 3)
+f_grey=$(tput setaf 8)
+f_white=$(tput setaf 15)
+
+# other formatting
+f_underline=`tput smul`
+f_nounderline=`tput rmul`
+
+# ----- Internals ----- #
+
 print_description() {
-  echo "The $(${BASENAME} $0) utility removes Mac OS packages by their pkg files."
+  echo "The ${f_underline}$(${BASENAME} $0)${f_nounderline} utility removes Mac OS packages by their pkg files."
   print_usage
 }
 
 print_usage() {
-  echo "Usage: $(${BASENAME} $0) [-hfd] [-t tmp_dir] -p path_to_pkg"
-  echo "       -p path-to-pkg -– specify path to package to delete."
-  echo "       -h -- print short description and this message."
-  echo "       -f -- force delete files. Will not ask for delection of every file."
-  echo "       -d -- remove whole directory with package installation."
-  echo "       -t tmp_dir -- specify directory to put temporal files to. Default is $TMP_DIR."
+  echo "Usage: ${f_white}$(${BASENAME} $0)${f_normal} [-v] [-h] [-f] [-d] [-t ${f_underline}tmp-dir${f_nounderline}] ${f_underline}package-to-remove${f_nounderline}
+\tRemoves package specified by ${f_underline}package-to-remove${f_nounderline}.
+
+\t-v\tVerbose mode. Will only go through package and print general information.
+\t-h\tPrint short description and this message.
+\t-f\tForce delete files. Will not ask for delection of every file.
+\t-d\tRemove whole directory with package installation.
+\t-t ${f_underline}tmp-dir${f_nounderline}
+\t\tSpecify directory to put temporal files to. Default is ${f_underline}$TMP_DIR${f_nounderline}."
 }
 
+# checks whether $EXPAND_DIR exists and tries to remove it.
 clean_up() {
-  # clean up
-  if [ -n "$EXPAND_DIR" ]; then
+  if [[ -n "$EXPAND_DIR" && -d "$EXPAND_DIR" ]]; then
     info "Removing temporary directory $EXPAND_DIR"
     "$RM" -rf "$EXPAND_DIR"
   fi
 }
 
 info() {
-  echo "Info: $*"
+  echo "${f_green}Info:\t$*${f_normal}"
 }
 
 warn() {
-  echo "Warn: $*"
+  echo "${f_yellow}Warn:\t$*${f_normal}"
 }
 
 error() {
-  echo "ERROR: $*"
+  echo "${f_red}ERROR:\t$*${f_normal}"
+}
+
+debug() {
+  if [[ -n $DEBUG ]]; then
+    echo "${f_grey}DEBUG:\t$*${f_normal}"
+  fi
 }
 
 # parse input parameters to RM_* and PKG variables
 parse_parameters() {
-  while getopts ":hfdt:p:" flag
+  # parse parameters
+  debug "About to parse parameters: '$@'"
+  while getopts ":vhfdt:" flag
   do
+    debug "Processing flag '$flag'"
     case $flag in
       h)
-        # print description and exit
+      # print description and exit
         print_description
-        exit 0
-        ;;
+        exit
+      ;;
       f)
-        # force delete pkg files
+      # force delete pkg files
         info "-f option specified. Forcing deletion."
         RM_ARGS="-f"
-        ;;
+      ;;
       d)
-        # delete full pkg directory instead of one-by-one per file removal
+      # delete full pkg directory instead of one-by-one per file removal
         info "-d option specified. Removing whole package installation."
-        RM_ALL="y"
-        ;;
-      p)
-        # package name to work with
-        # check if we can read package
-        if [ -r "$OPTARG" ]; then
-          PKG="$OPTARG"
-          info "$PKG will be deleted."
-        else
-          error "Cannot open for read $OPTARG."
-          exit 1
-        fi
-        ;;
+        RM_ALL=true
+      ;;
       t)
-        # change dir to work with package.
-        # check if directory exists
+      # change dir to work with package.
+      # check if directory exists
         if [ -d "$OPTARG" ]; then
           TMP_DIR="$OPTARG"
           info "Work with package will be done in $TMP_DIR"
         else
           warn "No such directory $OPTARG. Temporal files derectory left default: $TMP_DIR"
         fi
-        ;;
+      ;;
+      v)
+      # don't delete, simply show pkg info
+        info "Verbose mode enabled. No changes will be done."
+        VERBOSE=true
+      ;;
       ?)
-        warn "Unknown flag: $OPTARG"
-        ;;
-      *)
-        error "Unexpected flag: $flag, arg: $OPTARG."
-        if [ -r "$OPTARG" ]; then
-          PKG="$OPTARG"
-          info "$PKG will be considered for deletion."
-        fi
-        ;;
+        error "Unknown flag: $OPTARG"
+        print_usage
+        exit 2
+      ;;
     esac
   done
+
+  # parse_package
+  PKG="${!OPTIND}"
+
+  if [[ -z $PKG ]]; then
+    error "Package not specified."
+    print_usage
+    exit 1
+  elif [[ ! -r $PKG ]]; then # check if we can read package file
+    error "Cannot open for read $PKG."
+    exit 1
+  fi
+
+  info "Specified package: $PKG ."
 }
 
+# returns package install location by parsing PackageInfo file by path specified with 1st parameter
+install_location() {
+  echo "$(${XMLLINT} --xpath "string(//@install-location)" "$1")"
+}
+
+# return install path of the bundle content, can return multiple rows
+bundles_path() {
+  echo $(${XMLLINT} --xpath "//bundle/@path" "$1" | tr ' ' '\n' | cut -d '=' -f 2 | tr -d '"')
+}
+
+# remove command wrapper
+remove() {
+  if [[ ${VERBOSE} ]]; then # verbose mode, don't remove anything
+    return
+  fi
+
+  # todo actually add removal
+  debug "$SUDO" "$SUDO_OPTS" "$RM" "$RM_ARGS" "$@"
+  if [ $? != 0 ]; then
+    info "Unable to delete ${f_underline}$@${f_nounderline}"
+    clean_up
+    exit 2
+  fi
+}
+
+# ----- MAIN ----- #
 parse_parameters "$@"
+info "Starting processing ${f_underline}$PKG${f_nounderline}."
 
-# check if package name passed
-if [ -z "$PKG" ]; then
-  error "Package not specified."
-  print_usage
-  exit 1
-fi
-
-PKG_NAME="$(${BASENAME} "${PKG}")"
+PKG_NAME="$(${BASENAME} "$PKG")"
 if [ $? -ne 0 ]; then
-  error "Cannot extract package name from path $PKG"
+  error "Cannot extract package name from path ${f_underline}$PKG${f_nounderline}."
   exit 1
 fi
 
 # generate directory to expand package to
-EXPAND_DIR="${TMP_DIR}/${PKG_NAME}.${RANDOM}.$($DATE +%s)"
+EXPAND_DIR="${TMP_DIR}/${PKG_NAME}.${RANDOM}.$(${DATE} +%s)"
 
 # extract package
-info "Expanding ${PKG} to $EXPAND_DIR"
-$PKGUTIL --expand "$PKG" "$EXPAND_DIR"
+info "Expanding $PKG to ${f_underline}$EXPAND_DIR${f_nounderline}."
+"$PKGUTIL" --expand "$PKG" "$EXPAND_DIR"
 if [ $? -ne 0 ]; then
-  error "Failed while expanding $PKG to $EXPAND_DIR"
+  error "Failed while expanding ${f_underline}$PKG${f_nounderline} to ${f_underline}$EXPAND_DIR${f_nounderline}."
   clean_up
   exit 1
 fi
@@ -144,39 +205,37 @@ pushd .
 cd "$EXPAND_DIR"
 
 # look for dir with ending '.pkg' and delete content of every subpackage
-for pkg_dir in $(${FIND} . -type d -name "*.pkg"); do
-  info "Processing subpackage $pkg_dir"
+pkg_dirs=$(${FIND} . -type d -name "*.pkg")
+info "Subpackages found in ${f_underline}$PKG${f_nounderline}:\n$pkg_dirs"
+
+for pkg_dir in ${pkg_dirs}; do
+  info "Processing subpackage ${f_underline}$pkg_dir${f_nounderline}"
   # remember working directory
   pushd .
   # go to pkg content dir
   cd "$pkg_dir"
 
   info "Parsing install-location..."
-  install_dir="$($XMLLINT --xpath "string(//@install-location)" "$PACKAGE_INFO")"
+  install_dir=$(install_location "$PACKAGE_INFO")
   info "install-location: $install_dir"
 
-  info "Removing installed package content..."
+  if [ ${RM_ALL} ]; then
+    sub_paths=$(bundles_path "$PACKAGE_INFO")
+    info "Sub paths: ${sub_paths}"
 
-  if [ "$RM_ALL" = "y" ]; then
-    full_dir_path="${install_dir}/$($XMLLINT --xpath "string(//bundle/@path)" "$PACKAGE_INFO")"
-
-    info "Removing whole $full_dir_path"
-    "$SUDO" "$RM" "$RM_ARGS" "$RM_ALL_OPT" "$full_dir_path"
-    if [ $? != 0 ]; then
-      info "Unable to delete $full_dir_path"
-      clean_up
-      exit 2
-    fi
+    for sub_path in ${sub_paths}; do
+      # dirname command removes trailing './' in the path if any
+      sub_path="$(${DIRNAME} "${install_dir}/$sub_path")"
+      info "Removing subpath $sub_path"
+      remove "$RM_ALL_OPT" "$sub_path"
+    done
   else
     for file in $("$LSBOM" -slf "$BOM"); do
-      full_path="${install_dir}/${file}"
-      info "Removing $full_path"
-      "$SUDO" "$SUDO_OPTS" "$RM" "$RM_ARGS" "$full_path"
-      if [ $? != 0 ]; then
-        info "Unable to delete $full_path"
-        clean_up
-        exit 2
-      fi
+      # construct path and remove unnecessary './' reference
+      full_path="${install_dir}/${file#./}"
+
+      info "Removing full ${f_underline}$full_path${f_nounderline}."
+      remove "$full_path"
     done
   fi
 
@@ -189,5 +248,5 @@ popd
 
 clean_up
 
-info "Success."
+info "Done."
 exit 0
