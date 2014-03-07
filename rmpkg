@@ -1,6 +1,7 @@
 #!/bin/sh
 
 # todo add pkgutil --forget
+DEBUG=false
 
 # lets be paranoic
 set -e
@@ -27,8 +28,6 @@ TMP_DIR=/tmp
 PACKAGE_INFO=PackageInfo
 BOM=Bom
 
-DEBUG=false
-
 # ----- Output format variables ----- #
 # reset formatting
 f_reset=$(tput sgr0)
@@ -42,26 +41,26 @@ f_grey=$(tput setaf 8)
 f_white=$(tput setaf 15)
 
 # other formatting
-f_underline=`tput smul`
-f_nounderline=`tput rmul`
+f_u=$(tput smul)
+f_nu=$(tput rmul)
 
 # ----- Internals ----- #
 
 print_description() {
-  echo "The ${f_underline}$(${BASENAME} $0)${f_nounderline} utility removes Mac OS packages by their pkg files."
+  echo "The ${f_u}$(${BASENAME} $0)${f_nu} utility removes Mac OS packages by their pkg files."
   print_usage
 }
 
 print_usage() {
-  echo "Usage: ${f_white}$(${BASENAME} $0)${f_normal} [-v] [-h] [-f] [-d] [-t ${f_underline}tmp-dir${f_nounderline}] ${f_underline}package-to-remove${f_nounderline}
-\tRemoves package specified by ${f_underline}package-to-remove${f_nounderline}.
+  echo "Usage: ${f_white}$(${BASENAME} $0)${f_normal} [-v] [-h] [-f] [-d] [-t ${f_u}tmp-dir${f_nu}] ${f_u}package-to-remove${f_nu}
+\tRemoves package specified by ${f_u}package-to-remove${f_nu}.
 
 \t-v\tVerbose mode. Will only go through package and print general information.
 \t-h\tPrint short description and this message.
 \t-f\tForce delete files. Will not ask for delection of every file.
 \t-d\tRemove whole directory with package installation.
-\t-t ${f_underline}tmp-dir${f_nounderline}
-\t\tSpecify directory to put temporal files to. Default is ${f_underline}$TMP_DIR${f_nounderline}."
+\t-t ${f_u}tmp-dir${f_nu}
+\t\tSpecify directory to put temporal files to. Default is ${f_u}$TMP_DIR${f_nu}."
 }
 
 # checks whether $EXPAND_DIR exists and tries to remove it.
@@ -170,7 +169,7 @@ remove() {
   # todo actually add removal
   debug "$SUDO" "$SUDO_OPTS" "$RM" "$RM_ARGS" "$@"
   if [ $? != 0 ]; then
-    info "Unable to delete ${f_underline}$@${f_nounderline}"
+    info "Unable to delete ${f_u}$@${f_nu}"
     clean_up
     exit 2
   fi
@@ -178,11 +177,11 @@ remove() {
 
 # ----- MAIN ----- #
 parse_parameters "$@"
-info "Starting processing ${f_underline}$PKG${f_nounderline}."
+info "Starting processing ${f_u}$PKG${f_nu}."
 
 PKG_NAME="$(${BASENAME} "$PKG")"
 if [ $? -ne 0 ]; then
-  error "Cannot extract package name from path ${f_underline}$PKG${f_nounderline}."
+  error "Cannot extract package name from path ${f_u}$PKG${f_nu}."
   exit 1
 fi
 
@@ -190,10 +189,10 @@ fi
 EXPAND_DIR="${TMP_DIR}/${PKG_NAME}.${RANDOM}.$(${DATE} +%s)"
 
 # extract package
-info "Expanding $PKG to ${f_underline}$EXPAND_DIR${f_nounderline}."
+info "Expanding $PKG to ${f_u}$EXPAND_DIR${f_nu}."
 "$PKGUTIL" --expand "$PKG" "$EXPAND_DIR"
 if [ $? -ne 0 ]; then
-  error "Failed while expanding ${f_underline}$PKG${f_nounderline} to ${f_underline}$EXPAND_DIR${f_nounderline}."
+  error "Failed while expanding ${f_u}$PKG${f_nu} to ${f_u}$EXPAND_DIR${f_nu}."
   clean_up
   exit 1
 fi
@@ -206,10 +205,10 @@ cd "$EXPAND_DIR"
 
 # look for dir with ending '.pkg' and delete content of every subpackage
 pkg_dirs=$(${FIND} . -type d -name "*.pkg")
-info "Subpackages found in ${f_underline}$PKG${f_nounderline}:\n$pkg_dirs"
+info "Subpackages found in ${f_u}$PKG${f_nu}:\n$pkg_dirs"
 
 for pkg_dir in ${pkg_dirs}; do
-  info "Processing subpackage ${f_underline}$pkg_dir${f_nounderline}"
+  info "Processing subpackage ${f_u}$pkg_dir${f_nu}"
   # remember working directory
   pushd .
   # go to pkg content dir
@@ -234,7 +233,7 @@ for pkg_dir in ${pkg_dirs}; do
       # construct path and remove unnecessary './' reference
       full_path="${install_dir}/${file#./}"
 
-      info "Removing full ${f_underline}$full_path${f_nounderline}."
+      info "Removing full ${f_u}$full_path${f_nu}."
       remove "$full_path"
     done
   fi
