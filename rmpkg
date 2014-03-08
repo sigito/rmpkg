@@ -1,15 +1,10 @@
 #!/bin/sh
 
-# todo add pkgutil --forget
 DEBUG=false
-
-# lets be paranoic
-set -e
 
 PKGUTIL=/usr/sbin/pkgutil
 LSBOM=/usr/bin/lsbom
 BASENAME=/usr/bin/basename
-DIRNAME=/usr/bin/dirname
 DATE=/bin/date
 FIND=/usr/bin/find
 XMLLINT=/usr/bin/xmllint
@@ -111,6 +106,7 @@ parse_parameters() {
       # delete full pkg directory instead of one-by-one per file removal
         debug "-d option specified. Removing whole package installation."
         RM_ALL=true
+        RM_ARGS=""
       ;;
       t)
       # change dir to work with package.
@@ -155,28 +151,26 @@ install_location() {
   echo "$(${XMLLINT} --xpath "string(/pkg-info/@install-location)" "$1")"
 }
 
-# return install path of the bundle content, can return multiple rows
-bundles_path() {
-  echo $(${XMLLINT} --xpath "/pkg-info/bundle/@path" "$1" | tr ' ' '\n' | cut -d '=' -f 2 | tr -d '"')
-}
-
 # remove command wrapper
 remove() {
   if [[ ${VERBOSE} ]]; then # verbose mode, don't remove anything
     return
   fi
 
-  # todo actually add removal
-  debug "$SUDO" "$SUDO_OPTS" "$RM" "$RM_ARGS" "$@"
-  if [ $? != 0 ]; then
-    info "Unable to delete ${f_u}$@${f_nu}"
+  debug "Executing: $SUDO $SUDO_OPTS $RM $RM_ALL_OPT $RM_ARGS $@"
+  "$SUDO" "$SUDO_OPTS" "$RM" "$RM_ALL_OPT" "$RM_ARGS" "$@"
+
+  if [[ $? != 0 ]]; then
+    error "Unable to delete ${f_u}$@${f_nu}"
     clean_up
     exit 2
   fi
 }
 
 # ----- MAIN ----- #
+
 parse_parameters "$@"
+
 info "Starting processing ${f_u}$PKG${f_nu}."
 
 PKG_NAME="$(${BASENAME} "$PKG")"
@@ -186,12 +180,11 @@ if [ $? -ne 0 ]; then
 fi
 
 # generate directory to expand package to
-#EXPAND_DIR="${TMP_DIR}/${PKG_NAME}.${RANDOM}.$(${DATE} +%s)"
-EXPAND_DIR="/tmp/MacTeX.pkg.26512.1394231345"
+EXPAND_DIR="${TMP_DIR}/${PKG_NAME}.${RANDOM}.$(${DATE} +%s)"
 
 # extract package
 info "Expanding ${f_u}$PKG${f_nu} to ${f_u}$EXPAND_DIR${f_nu}."
-#"$PKGUTIL" --expand "$PKG" "$EXPAND_DIR"
+"$PKGUTIL" --expand "$PKG" "$EXPAND_DIR"
 if [ $? -ne 0 ]; then
   error "Failed while expanding ${f_u}$PKG${f_nu} to ${f_u}$EXPAND_DIR${f_nu}."
   clean_up
@@ -220,17 +213,19 @@ for pkg_dir in ${pkg_dirs}; do
   info "Install location: $install_dir"
 
   if [ ${RM_ALL} ]; then
-    bundles=$(bundles_path "$PACKAGE_INFO")
-    info "Bundles: $bundles"
-
-    for bundle in ${bundles}; do
+    # index iteration over xml
+    # note: do not move to separate method unless there is a solution for spaces handling
+    count=$(${XMLLINT} --xpath 'count(/pkg-info/bundle/@path)' "$PACKAGE_INFO")
+    debug "Bundles number: $count"
+    for (( i=1; i <= $(($count)); i++ )); do
+      bundle=$(${XMLLINT} --xpath "string(/pkg-info/bundle[$i]/@path)" "$PACKAGE_INFO")
       # remove trailing './'
-      bundle=${bundle#./}
-      debug "Processing subpath: $bundle"
+      bundle="${bundle#./}"
+      info "Processing subpath: $bundle"
       # construct full path to delete
       bundle="${install_dir}/${bundle}"
       info "Removing subpath ${f_u}$bundle${f_nu}"
-      remove "$RM_ALL_OPT" "$bundle"
+      remove "$bundle"
     done
   else
     for file in $("$LSBOM" -slf "$BOM"); do
@@ -251,7 +246,7 @@ done
 # go to execution directory
 popd
 
-#clean_up
+clean_up
 
 info "Done."
 exit 0
