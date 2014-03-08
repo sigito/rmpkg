@@ -78,7 +78,7 @@ error() {
 }
 
 debug() {
-  if [[ -n $DEBUG ]]; then
+  if [[ $($DEBUG) ]]; then
     echo "${f_grey}DEBUG:\t$*${f_normal}"
   fi
 }
